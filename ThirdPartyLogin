@@ -1,0 +1,211 @@
+//1）写一个超链接用作登陆按钮，以及两个实体类
+<a href="https://github.com/login/oauth/authorize?client_id=你的client_id&redirect_uri=http://localhost:8080/callback&state=1">登陆</a>
+
+public class AccessTokenDto {
+	public String getClient_id() {
+		return client_id;
+	}
+	public void setClient_id(String client_id) {
+		this.client_id = client_id;
+	}
+	public String getClient_secret() {
+		return client_secret;
+	}
+	public void setClient_secret(String client_secret) {
+		this.client_secret = client_secret;
+	}
+	public String getCode() {
+		return code;
+	}
+	public void setCode(String code) {
+		this.code = code;
+	}
+	public String getRedirect_uri() {
+		return redirect_uri;
+	}
+	public void setRedirect_uri(String redirect_uri) {
+		this.redirect_uri = redirect_uri;
+	}
+	public String getState() {
+		return state;
+	}
+	public void setState(String state) {
+		this.state = state;
+	}
+	private String client_id; //客户端ID。
+    private String client_secret; //客户端密钥
+    private String code; //作为对步骤 1 的响应而接收的代码。
+    private String redirect_uri; //应用程序中的用户在授权后发送的URL
+    private String state; //在步骤 1 中提供的不可猜测的随机字符串
+
+}
+public class GithubUser {
+    public Long getId() {
+		return id;
+	}
+	public void setId(Long id) {
+		this.id = id;
+	}
+	public String getName() {
+		return name;
+	}
+	public void setName(String name) {
+		this.name = name;
+	}
+	public String getBio() {
+		return bio;
+	}
+	public void setBio(String bio) {
+		this.bio = bio;
+	}
+	private Long id;
+    private String name;
+    private String bio;
+    
+}
+
+
+//2)Controller
+@Controller
+public class AuthoriseController {
+
+    @Autowired
+    private GithubProvider githubProvider;
+
+    @Autowired
+    private GithubParams githubParams;
+
+    @GetMapping("/callback")
+    public String callback(@RequestParam("code") String code,
+                           @RequestParam("state") String state){
+        AccessTokenDto accessTokenDto = new AccessTokenDto();
+        accessTokenDto.setClient_id(githubParams.getClient_id());
+        accessTokenDto.setClient_secret(githubParams.getClient_secret());
+        accessTokenDto.setCode(code);
+        accessTokenDto.setRedirect_uri(githubParams.getRedirect_uri());
+        accessTokenDto.setState(state);
+        //获取access_token
+        String access_token = githubProvider.getAccessToken(accessTokenDto);
+        //根据accessToken获取用户信息
+        GithubUser githubUser = githubProvider.getGithubUser(access_token);
+        System.out.println(githubUser.getName());
+
+        return "index";
+    }
+}
+
+//3)你需要导入两个maven依赖
+<!--引入OKHTTP，发送请求-->
+<dependency>
+    <groupId>com.squareup.okhttp3</groupId>
+    <artifactId>okhttp</artifactId>
+    <version>3.6.0</version>
+</dependency>
+
+<!--引入fastjson-->
+<dependency>
+    <groupId>com.alibaba</groupId>
+    <artifactId>fastjson</artifactId>
+    <version>1.2.62</version>
+</dependency>
+
+//4)GithubProvider（用于获取access_token和user信息）
+
+@Component
+public class GithubProvider {
+    @Autowired
+    private GithubParams githubParams;
+
+    /**
+     * 获取AccessToken
+     */
+    public String getAccessToken(AccessTokenDto accessTokenDto) {
+        OkHttpClient client = new OkHttpClient();
+        MediaType mediaType = MediaType.parse("application/json; char-set=utf-8");
+        //将accessTokenDto转为json字符串传入参数
+        RequestBody body = RequestBody.create(mediaType, JSON.toJSONString(accessTokenDto));
+        Request request = new Request.Builder()
+                .url(githubParams.getToken_uri())
+                .post(body)
+                .build();
+        try (Response response = client.newCall(request).execute()) {
+            String str = response.body().string();
+            //得到的是类似这样的字符串，我们需要将它分割，只要access_token部分
+            //5)access_token=9566ba3483a556c610be42d44338f3fd16a3b8d1&scope=&token_type=bearer
+            return str.split("&")[0].split("=")[1];
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    /**
+     * 根据access_token获取用户信息
+     */
+    public GithubUser getGithubUser(String access_token) {
+        OkHttpClient client = new OkHttpClient();
+        Request request = new Request.Builder()
+                .url(githubParams.getUser_uri() + "?access_token=" + ac-cess_token)
+                .build();
+
+        try (Response response = client.newCall(request).execute()) {
+            //得到的是json字符串，因此需要转为GithubUser对象
+            return JSON.parseObject(response.body().string(), GithubUs-er.class);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+}
+
+//6)GithubParams，配置参数
+@Component
+@ConfigurationProperties(prefix = "github")
+public class GithubParams {
+
+	private String client_id;
+    private String client_secret;
+    private String redirect_uri;
+    private String token_uri;
+    private String user_uri;
+    
+    public String getClient_id() {
+		return client_id;
+	}
+	public void setClient_id(String client_id) {
+		this.client_id = client_id;
+	}
+	public String getClient_secret() {
+		return client_secret;
+	}
+	public void setClient_secret(String client_secret) {
+		this.client_secret = client_secret;
+	}
+	public String getRedirect_uri() {
+		return redirect_uri;
+	}
+	public void setRedirect_uri(String redirect_uri) {
+		this.redirect_uri = redirect_uri;
+	}
+	public String getToken_uri() {
+		return token_uri;
+	}
+	public void setToken_uri(String token_uri) {
+		this.token_uri = token_uri;
+	}
+	public String getUser_uri() {
+		return user_uri;
+	}
+	public void setUser_uri(String user_uri) {
+		this.user_uri = user_uri;
+	}
+	
+    
+}
+/*7)配置文件application.properties
+server.port=8087
+github.client_id=你生成的id
+github.client_secret=你生成的密码
+github.redirect_uri=http://localhost:8887/callback
+github.token_uri=https://github.com/login/oauth/access_token
+github.user_uri=http://localhost:8887/callback
